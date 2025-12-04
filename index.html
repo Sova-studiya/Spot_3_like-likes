@@ -120,16 +120,28 @@
         
         .correct { color: #10b981; }
         .incorrect { color: #ef4444; }
+
+        /* Confetti Canvas - для эффекта салюта/победы */
+        #confetti-canvas {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            z-index: 9999;
+            pointer-events: none; /* Allows clicks to pass through */
+        }
     </style>
 </head>
 <body class="flex justify-center min-h-screen">
+<canvas id="confetti-canvas"></canvas> <!-- Контейнер для салюта/конфетти -->
 
 <div id="game-container" class="rounded-xl shadow-2xl">
     <div id="score-board" class="text-right text-2xl font-bold text-gray-700 mb-6">
-        Счет: <span id="current-score" class="text-green-600">0</span> / 50
+        Счет: <span id="current-score" class="text-green-600">0</span> / 30
     </div>
 
-    <h2 class="text-3xl font-extrabold text-gray-800 mb-6 border-b pb-2">Угости своих друзей</h2>
+    <h2 class="text-3xl font-extrabold text-gray-800 mb-6 border-b pb-2">Грамматический Ресторан</h2>
 
     <div id="client-area" class="flex items-start mb-8 bg-gray-50 p-4 rounded-lg">
         
@@ -183,7 +195,7 @@
     ];
 
     let currentScore = 0;
-    const targetScore = 50;
+    const targetScore = 30; // ИЗМЕНЕНО: Целевой счет для победы
     let currentSubjects = []; // Массив из 1 или 2 аватаров
     let subjectPronoun = "I"; // Определяет I или We для всего сеанса
     let currentStatements = []; // Исходные 6 утверждений (не меняются в ходе квиза)
@@ -312,13 +324,16 @@
         inventory.innerHTML = ''; 
 
         itemsToDisplay.forEach(item => {
-            const fileName = item === 'biscuit' ? 'biscuit.png' : `${item}.png`;
-            
+            // ИСПРАВЛЕНО: Теперь просто используем имя продукта + .png, так как все файлы изображений
+            // (mangos, apples, bananas и т.д.) названы во множественном числе в img/.
+            const finalFileName = `${item}.png`;
+
+
             const itemDiv = document.createElement('div');
             itemDiv.className = 'food-item bg-gray-50 rounded-lg p-2 cursor-pointer hover:bg-yellow-200';
             itemDiv.setAttribute('data-item', item);
             
-            itemDiv.innerHTML = `<img src="img/${fileName}" alt="${item}" class="w-16 h-16 mx-auto mb-1">
+            itemDiv.innerHTML = `<img src="img/${finalFileName}" alt="${item}" class="w-16 h-16 mx-auto mb-1" onerror="this.onerror=null; this.src='https://placehold.co/60x60/cccccc/333333?text=${item.substring(0,2).toUpperCase()}'">
                                  <span class="text-sm font-medium capitalize">${item}</span>`;
             
             // Ищем полное утверждение по названию продукта
@@ -434,10 +449,11 @@
         setTimeout(() => { 
             // 1. Проверяем условие победы
             if (currentScore >= targetScore) {
-                feedback.textContent = "ПОБЕДА! Вы набрали 50 баллов и успешно выполнили заказы всех клиентов!";
+                feedback.textContent = "ПОБЕДА! Вы набрали 30 баллов и успешно выполнили заказы всех клиентов!";
                 feedback.classList.add('bg-yellow-200', 'p-2', 'rounded');
                 document.getElementById('inventory').innerHTML = '<p class="text-center text-xl mt-4">Игра завершена!</p>';
                 document.getElementById('quiz-area').classList.add('hidden');
+                startConfetti(); // ТРИГГЕР САЛЮТА
                 return;
             }
 
@@ -453,7 +469,106 @@
         }, 2000); 
     }
 
-    // --- 9. ЗАПУСК ИГРЫ ---
+    // --- 9. ЛОГИКА КОНФЕТТИ/САЛЮТА ---
+    const canvas = document.getElementById('confetti-canvas');
+    const ctx = canvas.getContext('2d');
+    var W, H, maxConfettis; // ИСПРАВЛЕНО: Использовано 'var' вместо 'let' для предотвращения SyntaxError: Identifier 'W' has already been declared
+    let confettis = [];
+    const colors = ["#f2385a", "#f5a503", "#e9f1df", "#4ad9d9", "#36b1bf", "#3b396b"];
+
+    function resizeCanvas() {
+        W = canvas.width = window.innerWidth;
+        H = canvas.height = window.innerHeight;
+        maxConfettis = Math.floor(W * H / 15000); // Динамическое количество конфетти
+    }
+
+    window.addEventListener('resize', resizeCanvas);
+    resizeCanvas(); // Инициализация размеров
+
+    function Confetti(x, y, color) {
+        this.x = x;
+        this.y = y;
+        this.w = Math.random() * 10 + 5;
+        this.h = Math.random() * 8 + 4;
+        this.color = color;
+        this.d = Math.random() * 11 + 7; // Density/speed modifier
+        this.tilt = Math.random() * 30;
+        this.tiltAngle = 0;
+        this.tiltAngleSpeed = Math.random() * 0.07 + 0.05;
+        this.angle = Math.random() * Math.PI;
+        this.angleSpeed = Math.random() * 0.1 + 0.01;
+        this.velocity = { x: 0, y: Math.random() * 3 + 1 };
+    }
+
+    Confetti.prototype.draw = function() {
+        ctx.save();
+        ctx.translate(this.x, this.y);
+        ctx.rotate(this.tilt);
+        ctx.fillStyle = this.color;
+        ctx.fillRect(-this.w / 2, -this.h / 2, this.w, this.h);
+        ctx.restore();
+    };
+
+    function drawConfettiLoop() {
+        requestAnimationFrame(drawConfettiLoop);
+        ctx.clearRect(0, 0, W, H);
+
+        for (let i = 0; i < confettis.length; i++) {
+            const c = confettis[i];
+
+            c.tiltAngle += c.tiltAngleSpeed;
+            c.tilt = Math.sin(c.tiltAngle) * 30;
+            c.angle += c.angleSpeed;
+            c.x += Math.sin(c.angle);
+            c.y += c.velocity.y;
+            c.y += c.d; // Gravity simulation
+
+            c.draw();
+
+            // Если конфетти ушло за нижний край, удаляем его
+            if (c.y > H) {
+                confettis.splice(i, 1);
+                i--;
+            }
+        }
+    }
+
+    let confettiInterval;
+    function startConfetti() {
+        confettis = []; // Очищаем старые
+        
+        // Запускаем много конфетти из центра
+        for (let i = 0; i < maxConfettis; i++) {
+            confettis.push(new Confetti(
+                W / 2 + (Math.random() - 0.5) * W * 0.1, // Центр экрана +/- небольшой разброс
+                H * 0.8, // Нижняя часть экрана
+                colors[Math.floor(Math.random() * colors.length)]
+            ));
+        }
+
+        // Увеличиваем вертикальную скорость для имитации выстрела
+        confettis.forEach(c => {
+            c.velocity.y = -(Math.random() * 15 + 10);
+            c.velocity.x = (Math.random() - 0.5) * 15;
+            c.d = 0; // Отключаем гравитацию на старте
+        });
+        
+        // Повторно включаем гравитацию через короткое время
+        setTimeout(() => {
+             confettis.forEach(c => c.d = Math.random() * 11 + 7);
+        }, 500);
+
+        if (!confettiInterval) {
+            confettiInterval = drawConfettiLoop();
+        }
+
+        // Останавливаем салют через 4 секунды
+        setTimeout(() => {
+            confettis = [];
+        }, 4000); 
+    }
+    
+    // --- 10. ЗАПУСК ИГРЫ ---
     function initGame() {
         loadNewClient();
     }
