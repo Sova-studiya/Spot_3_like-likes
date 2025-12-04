@@ -1,0 +1,464 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Грамматический Ресторан: Likes/Doesn't Like Quiz</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        /* Общие стили и фон */
+        body { 
+            background-image: url('img/body.jpg'); 
+            background-size: cover;
+            background-attachment: fixed;
+            background-position: center;
+            padding: 10px;
+        }
+        
+        #game-container { 
+            width: 100%;
+            max-width: 900px;
+            padding: 20px;
+            background-color: rgba(255, 255, 255, 0.98);
+        }
+        
+        /* Зона Клиента (Контейнер для аватаров и речи) */
+        #client-area {
+            flex-direction: column;
+            align-items: center;
+            text-align: center;
+        }
+
+        @media (min-width: 640px) { /* sm breakpoint */
+            #client-area {
+                flex-direction: row;
+                align-items: flex-start;
+                text-align: left;
+            }
+        }
+
+        /* *** ИСПРАВЛЕНИЕ НАЛОЖЕНИЯ НА ТЕКСТ ***
+        Удалено абсолютное позиционирование, используется чистый Flexbox.
+        */
+        #avatar-container {
+            display: flex;
+            justify-content: flex-start;
+            gap: 20px; /* Зазор между аватарами */
+            margin-right: 16px; /* Отступ от речи */
+            width: auto; /* Ширина по контенту */
+            height: 120px; 
+            flex-shrink: 0; /* Не позволяет контейнеру аватаров сжиматься */
+        }
+
+        .client-avatar { 
+            width: 120px; 
+            height: 120px; 
+            object-fit: cover;
+            border: 4px solid #00bcd4;
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+            /* Убрано абсолютное позиционирование */
+        }
+
+        /* Стили для 2-х аватаров (теперь только Z-index, позиция определяется flexbox) */
+        #avatar-1 {
+            z-index: 20;
+        }
+        #avatar-2 {
+            z-index: 10;
+        }
+        
+        /* Стили для речи */
+        #speech-bubble { 
+            min-height: 120px;
+            transition: background-color 0.5s;
+            margin-top: 10px;
+            flex-grow: 1;
+        }
+        
+        @media (min-width: 640px) {
+            #speech-bubble {
+                margin-top: 0;
+                margin-left: 16px; 
+            }
+        }
+        /* Добавляем отступ в мобильном представлении, когда элементы в колонке */
+        @media (max-width: 639px) { 
+            #avatar-container {
+                margin-right: 0;
+                margin-bottom: 16px; 
+            }
+            #speech-bubble {
+                margin-left: 0;
+            }
+        }
+
+        /* Инвентарь и квиз (без изменений) */
+        .food-item { 
+            transition: all 0.2s; 
+            box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
+            min-width: unset; 
+        }
+        .food-item img {
+            width: 60px;
+            height: 60px;
+            object-fit: contain;
+        }
+        
+        #inventory {
+             grid-template-columns: repeat(3, minmax(0, 1fr));
+        }
+
+        @media (min-width: 640px) {
+             #inventory {
+                grid-template-columns: repeat(6, minmax(0, 1fr));
+            }
+        }
+        
+        #quiz-area { 
+            border: 3px dashed #00bcd4; 
+        }
+        
+        .correct { color: #10b981; }
+        .incorrect { color: #ef4444; }
+    </style>
+</head>
+<body class="flex justify-center min-h-screen">
+
+<div id="game-container" class="rounded-xl shadow-2xl">
+    <div id="score-board" class="text-right text-2xl font-bold text-gray-700 mb-6">
+        Счет: <span id="current-score" class="text-green-600">0</span> / 50
+    </div>
+
+    <h2 class="text-3xl font-extrabold text-gray-800 mb-6 border-b pb-2">Угости своих друзей</h2>
+
+    <div id="client-area" class="flex items-start mb-8 bg-gray-50 p-4 rounded-lg">
+        
+        <!-- Контейнер для одного или двух аватаров -->
+        <div id="avatar-container">
+            <img id="avatar-1" class="client-avatar rounded-full" src="" alt="Клиент 1"> 
+            <img id="avatar-2" class="client-avatar rounded-full hidden" src="" alt="Клиент 2"> 
+        </div>
+        
+        <div id="speech-bubble" class="p-4 rounded-xl bg-blue-50 text-gray-800 flex-grow relative">
+            <p id="client-speech" class="text-lg font-medium"></p>
+        </div>
+    </div>
+    
+    <h3 class="text-xl font-semibold text-gray-700 mb-4">Инвентарь (Кликните на продукт)</h3>
+    
+    <div id="inventory" class="gap-4 mb-8 grid">
+        <!-- Кликабельные продукты будут вставлены JavaScript -->
+    </div>
+
+    <div id="quiz-area" class="text-center p-6 rounded-xl hidden">
+        <p id="question-text" class="text-2xl font-bold mb-4"></p>
+        <div id="options-buttons" class="flex flex-col sm:flex-row justify-center space-y-4 sm:space-y-0 sm:space-x-4">
+            <!-- Кнопки опций будут вставлены JavaScript -->
+        </div>
+        <p id="feedback" class="text-xl font-semibold mt-4"></p>
+    </div>
+</div>
+
+<script>
+    // --- 1. ПЕРЕМЕННЫЕ И ДАННЫЕ ---
+    // Обновленный список аватаров, использующий только те файлы, которые есть в img/
+    const AVATARS = [
+        { name: "Arina", file: "img/Arina.png", gender: "She" },
+        { name: "Armen", file: "img/Armen.png", gender: "He" },
+        { name: "Artyom", file: "img/Artyom.png", gender: "He" },
+        { name: "Miron", file: "img/Miron.png", gender: "He" },
+        { name: "Ruslan", file: "img/Ruslan.png", gender: "He" },
+        { name: "Taya", file: "img/Taya.png", gender: "She" },
+        // Dima.png был удален, чтобы избежать ошибки. Заменен на Roma.png
+        { name: "Roma", file: "img/Roma.png", gender: "He" }, 
+        { name: "Vika", file: "img/Vika.png", gender: "She" },
+        { name: "Egor", file: "img/Egor.png", gender: "He" }, 
+        { name: "Katya", file: "img/Katya.png", gender: "She" },
+    ];
+
+    const ALL_FOOD_ITEMS = [
+        "apples", "bananas", "biscuit", "chips", "fish", "lemons", "mangos", "meat", 
+        "oranges", "pasta", "rice", "sandwiches", "sausages", "water", "juice", 
+        "milk", "lemonade", "chocolate"
+    ];
+
+    let currentScore = 0;
+    const targetScore = 50;
+    let currentSubjects = []; // Массив из 1 или 2 аватаров
+    let subjectPronoun = "I"; // Определяет I или We для всего сеанса
+    let currentStatements = []; // Исходные 6 утверждений (не меняются в ходе квиза)
+    let mentionedItems = []; // Продукты, которые нужно "отгадать" (уменьшается в ходе квиза)
+
+    // --- 2. УТИЛИТЫ ---
+    function getRandomElement(arr, exclude = []) {
+        // Упрощенная функция: исключение не используется, так как фильтрация теперь происходит до вызова функции.
+        if (arr.length === 0) return null;
+        return arr[Math.floor(Math.random() * arr.length)];
+    }
+    
+    // --- 3. ГЕНЕРАЦИЯ СЦЕНАРИЯ ---
+    function generateRandomClientData() {
+        currentSubjects = [];
+        currentStatements = [];
+        
+        // 1. Определяем, будет ли это ОДИН клиент (I) или ГРУППА (We)
+        const isGroup = Math.random() < 0.5;
+
+        if (isGroup) {
+            subjectPronoun = "We";
+            // Выбираем 2 уникальных аватара
+            
+            // 1. Выбираем первого аватара
+            const avatar1 = getRandomElement(AVATARS);
+            
+            // 2. Фильтруем список, чтобы исключить первого аватара по имени (гарантия уникальности)
+            const availableForSecond = AVATARS.filter(a => a.name !== avatar1.name);
+            
+            // 3. Выбираем второго аватара из отфильтрованного списка
+            // Проверка на случай, если остался только один аватар
+            const avatar2 = getRandomElement(availableForSecond.length > 0 ? availableForSecond : AVATARS);
+            
+            currentSubjects = [avatar1, avatar2];
+        } else {
+            subjectPronoun = "I";
+            // Выбираем 1 аватар
+            currentSubjects = [getRandomElement(AVATARS)];
+        }
+        
+        // 2. Выбираем 6 уникальных продуктов
+        const availableFood = [...ALL_FOOD_ITEMS];
+        const selectedFood = [];
+        for (let i = 0; i < 6; i++) {
+            const foodIndex = Math.floor(Math.random() * availableFood.length);
+            selectedFood.push(availableFood[foodIndex]);
+            availableFood.splice(foodIndex, 1);
+        }
+
+        // 3. Создаем 6 утверждений (все они используют ОДИНАКОВОЕ местоимение I или We)
+        selectedFood.forEach((item, index) => {
+            const isPositive = Math.random() < 0.5; // 50/50 like/don't like
+
+            currentStatements.push({
+                subjectInSpeech: subjectPronoun,
+                item: item,
+                isPositive: isPositive,
+                id: index
+            });
+        });
+
+        // mentionedItems теперь является массивом строк (только названия продуктов)
+        mentionedItems = selectedFood; 
+    }
+
+    // --- 4. ЗАГРУЗКА НОВОГО КЛИЕНТА (Полностью сбрасывает состояние) ---
+    function loadNewClient() {
+        // Сброс UI перед загрузкой новых данных
+        document.getElementById('quiz-area').classList.add('hidden');
+        document.getElementById('feedback').textContent = '';
+        
+        // Сброс речевого пузыря
+        const speechBubbleEl = document.getElementById('speech-bubble');
+        speechBubbleEl.classList.remove('bg-yellow-100');
+        speechBubbleEl.classList.add('bg-blue-50');
+        
+        generateRandomClientData();
+
+        const avatar1El = document.getElementById('avatar-1');
+        const avatar2El = document.getElementById('avatar-2');
+        const clientSpeechEl = document.getElementById('client-speech'); // Используем p#client-speech
+        
+        // Обновляем UI аватаров
+        avatar1El.src = currentSubjects[0].file;
+        avatar1El.alt = currentSubjects[0].name;
+        avatar1El.title = currentSubjects[0].name; // Подсказка
+        avatar1El.classList.remove('opacity-50'); // Убираем потенциальную прозрачность
+        
+        if (subjectPronoun === "We") {
+            // Показываем второго аватара
+            avatar2El.src = currentSubjects[1].file;
+            avatar2El.alt = currentSubjects[1].name;
+            avatar2El.title = currentSubjects[1].name; // Подсказка
+            avatar2El.classList.remove('hidden');
+        } else {
+            // Скрываем второго аватара
+            avatar2El.classList.add('hidden');
+        }
+        
+        // Генерируем и показываем РЕЧЬ КЛИЕНТА ОТ 1-ГО ЛИЦА (I или We)
+        let speechText = "";
+        currentStatements.forEach(data => {
+            let displayedSubject = data.subjectInSpeech; // I или We
+            
+            // Глагол для I и We всегда 'like'/'don\'t like'
+            const verb = data.isPositive ? "like" : "don't like";
+            
+            speechText += `${displayedSubject} ${verb} ${data.item}. `;
+        });
+
+        clientSpeechEl.textContent = speechText; // Устанавливаем полный текст заказа
+        clientSpeechEl.style.fontStyle = 'normal'; // Сбрасываем курсив, если был
+        
+        filterInventory();
+    }
+
+    // --- 5. ФИЛЬТР ИНВЕНТАРЯ И НАЧАЛО КВИЗА ПО ПАМЯТИ ---
+    function filterInventory() {
+        renderInventory(mentionedItems);
+    }
+
+    // --- 6. ФУНКЦИЯ ОТОБРАЖЕНИЯ ИНВЕНТАРЯ ---
+    function renderInventory(itemsToDisplay) {
+        const inventory = document.getElementById('inventory');
+        inventory.innerHTML = ''; 
+
+        itemsToDisplay.forEach(item => {
+            const fileName = item === 'biscuit' ? 'biscuit.png' : `${item}.png`;
+            
+            const itemDiv = document.createElement('div');
+            itemDiv.className = 'food-item bg-gray-50 rounded-lg p-2 cursor-pointer hover:bg-yellow-200';
+            itemDiv.setAttribute('data-item', item);
+            
+            itemDiv.innerHTML = `<img src="img/${fileName}" alt="${item}" class="w-16 h-16 mx-auto mb-1">
+                                 <span class="text-sm font-medium capitalize">${item}</span>`;
+            
+            // Ищем полное утверждение по названию продукта
+            const statementData = currentStatements.find(s => s.item === item);
+            
+            if (statementData) {
+                itemDiv.onclick = () => {
+                    // Визуальный намек, что текст теперь нужно вспомнить
+                    document.getElementById('speech-bubble').classList.remove('bg-blue-50');
+                    document.getElementById('speech-bubble').classList.add('bg-yellow-100');
+                    document.getElementById('client-speech').textContent = "Вспомните, что сказал(и) клиент(ы)..."; 
+                    document.getElementById('client-speech').style.fontStyle = 'italic';
+                    startQuiz(statementData); // Передаем полное утверждение
+                };
+            } else {
+                itemDiv.style.opacity = '0.5';
+                itemDiv.style.cursor = 'default';
+            }
+            
+            inventory.appendChild(itemDiv);
+        });
+    }
+
+    // --- 7. ЗАПУСК ВИКТОРИНЫ ПО ПРОДУКТУ (ИСПРАВЛЕНО: ПРОВЕРКА ПРЕДПОЧТЕНИЯ И ГРАММАТИКИ) ---
+    function startQuiz(data) {
+        document.getElementById('quiz-area').classList.remove('hidden');
+        document.getElementById('feedback').textContent = '';
+        document.getElementById('options-buttons').innerHTML = '';
+
+        let quizSubject;
+
+        // Определяем грамматический субъект для квиза (He/She или They)
+        if (data.subjectInSpeech === "I") {
+            // Если клиент сказал "I...", значит, мы должны говорить о нем в третьем лице единственного числа (He/She)
+            quizSubject = currentSubjects[0].gender; 
+        } else { // We
+            // Если клиенты сказали "We...", значит, значит, мы должны говорить о них в третьем лице множественного числа (They)
+            quizSubject = "They";
+        }
+
+        // --- 1. Определяем все возможные формы ---
+        const pluralLike = 'like';
+        const pluralDontLike = "don't like";
+        const singularLike = 'likes';
+        const singularDontLike = "doesn't like";
+
+        // --- 2. Определяем КОРРЕКТНУЮ форму (грамматика + память о предпочтении) ---
+        let requiredFormString;
+        if (quizSubject === "They") {
+            // Они: like или don't like
+            requiredFormString = data.isPositive ? pluralLike : pluralDontLike;
+        } else {
+            // Он/Она: likes или doesn't like
+            requiredFormString = data.isPositive ? singularLike : singularDontLike;
+        }
+
+        // --- 3. Определяем ОППОЗИЦИОННУЮ форму (неправильное предпочтение, но правильная грамматика) ---
+        let oppositeFormString;
+        if (data.isPositive) {
+            // Если клиент ЛЮБИТ (required=Positive), оппозиция - НЕНАВИСТЬ (Negative)
+            oppositeFormString = (quizSubject === "They") ? pluralDontLike : singularDontLike;
+        } else {
+            // Если клиент НЕ ЛЮБИТ (required=Negative), оппозиция - ЛЮБОВЬ (Positive)
+            oppositeFormString = (quizSubject === "They") ? pluralLike : singularLike;
+        }
+        
+        // 4. Создаем кнопки (случайно перемешиваем порядок)
+        const options = [requiredFormString, oppositeFormString];
+        options.sort(() => Math.random() - 0.5); // Перемешивание
+
+        options.forEach(optionValue => {
+            createButton(optionValue, optionValue, requiredFormString);
+        });
+
+        document.getElementById('question-text').textContent = `${quizSubject} _______ ${data.item}.`;
+
+        function createButton(buttonText, optionValue, requiredValue) {
+            const btn = document.createElement('button');
+            btn.textContent = buttonText;
+            btn.className = 'w-full sm:w-auto bg-teal-500 hover:bg-teal-700 text-white font-bold py-3 px-6 rounded-lg shadow-md disabled:opacity-50';
+            btn.onclick = () => checkAnswer(optionValue, requiredValue, data); 
+            document.getElementById('options-buttons').appendChild(btn);
+        }
+    }
+
+    // --- 8. ПРОВЕРКА ОТВЕТА И ПОДСЧЕТ БАЛЛОВ ---
+    function checkAnswer(userChoiceForm, requiredFormString, data) {
+        const feedback = document.getElementById('feedback');
+        const scoreSpan = document.getElementById('current-score');
+        
+        document.querySelectorAll('#options-buttons button').forEach(btn => btn.disabled = true);
+        
+        if (userChoiceForm === requiredFormString) {
+            currentScore = Math.min(currentScore + 1, targetScore); 
+            feedback.textContent = `Верно! 👍 (${currentScore}/${targetScore})`;
+            feedback.className = 'correct text-2xl';
+            
+            // Удаляем продукт из списка упомянутых (mentionedItems)
+            const itemIndex = mentionedItems.indexOf(data.item);
+            if (itemIndex > -1) {
+                mentionedItems.splice(itemIndex, 1); 
+            }
+
+        } else {
+            currentScore = Math.max(currentScore - 1, 0); 
+            feedback.textContent = `Неверно. 👎 Правильно: ${requiredFormString} (${currentScore}/${targetScore})`;
+            feedback.className = 'incorrect text-2xl';
+        }
+
+        scoreSpan.textContent = currentScore;
+        
+        // --- ЛОГИКА ПРОДОЛЖЕНИЯ ИГРЫ ---
+        setTimeout(() => { 
+            // 1. Проверяем условие победы
+            if (currentScore >= targetScore) {
+                feedback.textContent = "ПОБЕДА! Вы набрали 50 баллов и успешно выполнили заказы всех клиентов!";
+                feedback.classList.add('bg-yellow-200', 'p-2', 'rounded');
+                document.getElementById('inventory').innerHTML = '<p class="text-center text-xl mt-4">Игра завершена!</p>';
+                document.getElementById('quiz-area').classList.add('hidden');
+                return;
+            }
+
+            // 2. Проверяем, остались ли еще продукты для текущего клиента
+            if (mentionedItems.length > 0) {
+                document.getElementById('quiz-area').classList.add('hidden');
+                feedback.textContent = 'Выберите следующий продукт.';
+                filterInventory(); // Перерисовываем инвентарь с оставшимися продуктами
+            } else {
+                // Если все продукты отгаданы, загружаем нового клиента
+                loadNewClient(); 
+            }
+        }, 2000); 
+    }
+
+    // --- 9. ЗАПУСК ИГРЫ ---
+    function initGame() {
+        loadNewClient();
+    }
+    
+    document.addEventListener('DOMContentLoaded', initGame);
+</script>
+</body>
+</html>
