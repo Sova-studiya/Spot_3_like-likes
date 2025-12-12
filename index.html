@@ -449,13 +449,22 @@
         setTimeout(() => { 
             // 1. Проверяем условие победы
             if (currentScore >= targetScore) {
-                feedback.textContent = "ПОБЕДА! Вы набрали 30 баллов и успешно выполнили заказы всех клиентов!";
-                feedback.classList.add('bg-yellow-200', 'p-2', 'rounded');
-                document.getElementById('inventory').innerHTML = '<p class="text-center text-xl mt-4">Игра завершена!</p>';
-                document.getElementById('quiz-area').classList.add('hidden');
-                startConfetti(); // ТРИГГЕР САЛЮТА
-                return;
-            }
+    feedback.textContent = "ПОБЕДА! Вы набрали 30 баллов и успешно выполнили заказы всех клиентов!";
+    feedback.classList.add('bg-yellow-200', 'p-2', 'rounded');
+    document.getElementById('inventory').innerHTML = '<p class="text-center text-xl mt-4">Игра завершена!</p>';
+    document.getElementById('quiz-area').classList.add('hidden');
+    startConfetti();
+
+    // 🌟 ОТПРАВЛЯЕМ ПОБЕДУ В РОДИТЕЛЬСКУЮ ИГРУ
+    window.parent.postMessage({
+        type: "game_result",
+        key: "serve",
+        score: targetScore,
+        maxScore: targetScore
+    }, "*");
+
+    return;
+}
 
             // 2. Проверяем, остались ли еще продукты для текущего клиента
             if (mentionedItems.length > 0) {
@@ -577,3 +586,4 @@
 </script>
 </body>
 </html>
+
